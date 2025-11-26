@@ -53,6 +53,7 @@ class AuthState(rx.State):
                 )
                 self.is_admin = self.user_profile.get("role") == "admin"
                 yield rx.toast("Login realizado com sucesso!", duration=3000)
+                yield rx.redirect("/dashboard")
             else:
                 self.error = "E-mail ou senha inválidos."
         except Exception as e:
