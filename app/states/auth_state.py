@@ -56,8 +56,14 @@ class AuthState(rx.State):
             else:
                 self.error = "E-mail ou senha inválidos."
         except Exception as e:
-            self.error = "E-mail ou senha inválidos."
             logging.exception(f"Login Error: {e}")
+            error_msg = str(e).lower()
+            if "email not confirmed" in error_msg:
+                self.error = "ERRO DE CONFIGURAÇÃO: Vá no painel do Supabase > Authentication > Providers > Email e DESMARQUE 'Confirm email'."
+            elif "invalid login credentials" in error_msg:
+                self.error = "E-mail ou senha inválidos."
+            else:
+                self.error = "Erro ao fazer login. Tente novamente."
         self.is_loading = False
         yield
 

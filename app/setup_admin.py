@@ -7,11 +7,7 @@ from supabase import create_client, Client
 def setup_admin():
     """
     Script para configurar o usuário administrador no Supabase.
-
-    Este script:
-    1. Conecta ao Supabase usando as credenciais do ambiente
-    2. Cria ou verifica o usuário admin@exemplo.com
-    3. Garante que o usuário tenha role 'admin' na tabela profiles
+    Versão atualizada com melhor tratamento de erros para Email não confirmado.
     """
     url = os.environ.get("SUPABASE_URL")
     key = os.environ.get("SUPABASE_KEY")
@@ -22,10 +18,6 @@ def setup_admin():
 Certifique-se de que as seguintes variáveis estão definidas:
 - SUPABASE_URL: URL do seu projeto Supabase
 - SUPABASE_KEY: Chave de API (anon/public) do seu projeto
-
-Exemplo de configuração:
-export SUPABASE_URL="https://seu-projeto.supabase.co"
-export SUPABASE_KEY="sua-chave-publica-aqui"
         """)
         return False
     print(f"🔗 Conectando ao Supabase: {url[:30]}...")
@@ -41,131 +33,156 @@ export SUPABASE_KEY="sua-chave-publica-aqui"
     admin_nome = "Administrador do Sistema"
     print(f"\n👤 Configurando usuário administrador...")
     print(f"   Email: {admin_email}")
-    print(f"   Nome: {admin_nome}")
     user = None
     user_id = None
+    print("""
+🔍 Tentando autenticar usuário existente...""")
     try:
-        print("""
-🔍 Verificando se o usuário já existe...""")
-        try:
-            session = supabase.auth.sign_in_with_password(
-                {"email": admin_email, "password": admin_password}
-            )
+        session = supabase.auth.sign_in_with_password(
+            {"email": admin_email, "password": admin_password}
+        )
+        if session.user:
             user = session.user
-            print("✅ Usuário encontrado e senha correta!")
-        except Exception as login_error:
-            logging.exception(
-                f"Usuário não encontrado ou senha incorreta: {login_error}"
+            user_id = user.id
+            print("✅ Usuário autenticado com sucesso!")
+    except Exception as login_error:
+        logging.exception(
+            f"Login attempt failed (expected if user does not exist): {login_error}"
+        )
+        error_msg = str(login_error)
+        if "email not confirmed" in error_msg.lower():
+            project_ref = "_"
+            if "supabase.co" in url:
+                try:
+                    project_ref = url.split("//")[1].split(".")[0]
+                except Exception as e:
+                    logging.exception(f"Error extracting project ref: {e}")
+            dashboard_link = (
+                f"https://supabase.com/dashboard/project/{project_ref}/auth/providers"
             )
             print(
-                "👤 Usuário não encontrado ou senha incorreta. Criando novo usuário..."
+                """
+"""
+                + "█" * 80
             )
-            try:
-                auth_response = supabase.auth.sign_up(
-                    {
-                        "email": admin_email,
-                        "password": admin_password,
-                        "options": {"data": {"nome": admin_nome}},
-                    }
-                )
-                user = auth_response.user
-                if user:
-                    print("✅ Usuário criado com sucesso!")
-                    print("📧 Verifique seu email para confirmação (se necessário)")
-                else:
-                    print("⚠️  Falha na criação do usuário")
-                    return False
-            except Exception as signup_error:
-                logging.exception(f"Erro ao criar usuário: {signup_error}")
-                print(f"❌ Erro ao criar usuário: {signup_error}")
-                try:
-                    users = supabase.auth.admin.list_users()
-                    for u in users:
-                        if u.email == admin_email:
-                            user = u
-                            break
-                except Exception as e:
-                    logging.exception(f"Erro ao listar usuários: {e}")
-                    pass
-                if not user:
-                    return False
-        if not user:
-            print("❌ Falha crítica: usuário não foi encontrado nem criado")
-            return False
-        user_id = user.id
-        print(f"🆔 UUID do usuário: {user_id}")
-        print("""
-📋 Verificando perfil na tabela 'profiles'...""")
-        try:
-            profile_response = (
-                supabase.table("profiles").select("*").eq("user_id", user_id).execute()
+            print(
+                "█  🛑 ERRO CRÍTICO DE CONFIGURAÇÃO DO SUPABASE (EMAIL NOT CONFIRMED)          █"
             )
-            if profile_response.data:
-                print("👤 Perfil encontrado. Atualizando role para 'admin'...")
-                update_response = (
-                    supabase.table("profiles")
-                    .update({"role": "admin", "nome": admin_nome})
-                    .eq("user_id", user_id)
-                    .execute()
-                )
-                if update_response.data:
-                    print("✅ SUCESSO! Usuário promovido a administrador.")
-                    print(
-                        f"   Role atual: {update_response.data[0].get('role', 'unknown')}"
-                    )
-                else:
-                    raise Exception("Update não retornou dados")
-            else:
-                print("👤 Perfil não encontrado. Criando novo perfil admin...")
-                insert_response = (
-                    supabase.table("profiles")
-                    .insert({"user_id": user_id, "nome": admin_nome, "role": "admin"})
-                    .execute()
-                )
-                if insert_response.data:
-                    print("✅ SUCESSO! Perfil administrativo criado.")
-                else:
-                    raise Exception("Insert não retornou dados")
-        except Exception as profile_error:
-            logging.exception(f"Erro ao gerenciar perfil: {profile_error}")
-            print(f"⚠️  Erro ao gerenciar perfil: {profile_error}")
+            print(
+                "█" * 80
+                + """
+"""
+            )
+            print(
+                " O Login falhou porque o Supabase está esperando que você clique num link de e-mail."
+            )
+            print(
+                " Como você está em localhost, esse e-mail NUNCA chegará e a conta fica travada."
+            )
             print("""
-🛠️  AÇÃO MANUAL NECESSÁRIA:""")
-            print("A tabela 'profiles' provavelmente não existe ou não está acessível.")
-            print("-" * 60)
-            print("Por favor, vá até o SQL Editor do seu projeto Supabase e execute")
-            print("o conteúdo do arquivo: app/supabase_schema.sql")
-            print("-" * 60)
-            print("Isso criará a tabela 'profiles', as políticas de segurança (RLS)")
-            print("e os triggers necessários para o funcionamento do sistema.")
+    🛠️  COMO CORRIGIR EM 30 SEGUNDOS:
+""")
+            print(f"    🔗 1. CLIQUE AQUI: {dashboard_link}")
+            print("    👉 2. Clique na seção 'Email' para expandir as configurações.")
+            print("    👉 3. DESMARQUE a primeira opção: 'Confirm email'.")
+            print("    👉 4. Clique em 'Save' no canto inferior direito.")
+            print("""
+    🗑️  DEPOIS DE SALVAR (LIMPEZA NECESSÁRIA):
+""")
+            print("    👉 1. Vá no menu 'Authentication' -> 'Users' no Supabase.")
+            print(
+                "    👉 2. Delete o usuário 'admin@exemplo.com' (que está com status 'Waiting for verification')."
+            )
+            print("    👉 3. Rode este script novamente: python app/setup_admin.py")
+            print(
+                """
+"""
+                + "█" * 80
+                + """
+"""
+            )
+            return False
+        elif "Invalid login credentials" in error_msg:
+            print("ℹ️  Usuário não encontrado ou senha incorreta. Tentando criar...")
+        else:
+            print(f"⚠️  Erro no login: {login_error}")
+    if not user:
         try:
-            supabase.auth.sign_out()
-        except Exception as e:
-            logging.exception(f"Erro no logout: {e}")
-            pass
-        print(f"\n🎉 Configuração concluída!")
-        print(f"\n📝 Credenciais do administrador:")
-        print(f"   Email: {admin_email}")
-        print(f"   Senha: {admin_password}")
-        print(f"\n🚀 Você já pode fazer login na aplicação!")
-        return True
-    except Exception as e:
-        logging.exception(f"Erro inesperado: {e}")
-        print(f"\n❌ Erro inesperado: {e}")
+            print("🆕 Criando novo usuário...")
+            auth_response = supabase.auth.sign_up(
+                {
+                    "email": admin_email,
+                    "password": admin_password,
+                    "options": {"data": {"nome": admin_nome}},
+                }
+            )
+            if auth_response.user:
+                user = auth_response.user
+                user_id = user.id
+                print(f"✅ Usuário criado com ID: {user_id}")
+                if auth_response.session is None:
+                    print("""
+⚠️  ATENÇÃO: Usuário criado mas sem sessão ativa.""")
+                    print("   Provavelmente 'Confirm email' está ativado no Supabase.")
+                    print(
+                        "   O script tentará prosseguir, mas pode falhar se não tiver permissão pública."
+                    )
+            else:
+                print("❌ Falha ao criar usuário.")
+                return False
+        except Exception as signup_error:
+            logging.exception(f"Error creating user: {signup_error}")
+            print(f"❌ Erro ao criar usuário: {signup_error}")
+            return False
+    if not user_id:
+        print("❌ Não foi possível obter o ID do usuário. Abortando.")
         return False
+    print(f"\n📋 Gerenciando permissões na tabela 'profiles' para ID: {user_id}...")
+    try:
+        if supabase.auth.get_session():
+            print("🔑 Usando sessão autenticada para atualizar perfil...")
+        else:
+            print(
+                "⚠️  Sem sessão ativa. A atualização do perfil pode falhar devido ao RLS."
+            )
+        data = {"user_id": user_id, "nome": admin_nome, "role": "admin"}
+        upsert_response = supabase.table("profiles").upsert(data).execute()
+        if upsert_response.data:
+            print("✅ Perfil atualizado/criado com sucesso!")
+            print(f"   Role definida como: {upsert_response.data[0].get('role')}")
+        else:
+            print(
+                "✅ Comando enviado. Verifique no dashboard se a role 'admin' foi aplicada."
+            )
+    except Exception as profile_error:
+        logging.exception(f"Erro no perfil: {profile_error}")
+        print(f"\n❌ Erro ao atualizar perfil: {profile_error}")
+        print(
+            """
+"""
+            + "=" * 60
+        )
+        print("🛑 AVISO CRÍTICO: ERRO NAS POLÍTICAS DO BANCO DE DADOS")
+        print("=" * 60)
+        print(
+            "Parece que você está enfrentando problemas de permissão ou recursão RLS."
+        )
+        print("Para corrigir isso IMEDIATAMENTE:")
+        print("1. Abra o arquivo 'app/supabase_schema.sql' deste projeto.")
+        print("2. Copie TODO o conteúdo.")
+        print("3. Vá no painel do Supabase -> SQL Editor.")
+        print("4. Cole e clique em RUN.")
+        print(
+            "=" * 60
+            + """
+"""
+        )
+        return False
+    print(f"\n🎉 Configuração finalizada!")
+    print(f"   Login: {admin_email}")
+    print(f"   Senha: {admin_password}")
+    return True
 
 
 if __name__ == "__main__":
-    print("=" * 60)
-    print("🔧 CONFIGURAÇÃO DO USUÁRIO ADMINISTRADOR")
-    print("=" * 60)
-    success = setup_admin()
-    if success:
-        print("""
-✅ Script executado com sucesso!""")
-        sys.exit(0)
-    else:
-        print("""
-❌ Falha na execução do script.""")
-        print("Verifique os erros acima e tente novamente.")
-        sys.exit(1)
+    setup_admin()
