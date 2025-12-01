@@ -168,7 +168,7 @@ Certifique-se de que as seguintes variáveis estão definidas:
             "Parece que você está enfrentando problemas de permissão ou recursão RLS."
         )
         print("Para corrigir isso IMEDIATAMENTE:")
-        print("1. Abra o arquivo 'app/supabase_schema.sql' deste projeto.")
+        print("1. Abra o arquivo 'app/supabase_full_schema.sql' deste projeto.")
         print("2. Copie TODO o conteúdo.")
         print("3. Vá no painel do Supabase -> SQL Editor.")
         print("4. Cole e clique em RUN.")
